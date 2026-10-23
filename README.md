@@ -4,6 +4,12 @@ Mobile app for tracking personal income and expenses. Built with React Native (E
 
 Backend repository: [expense-tracker-api](https://github.com/Nick-Meron/expense-tracker-api)
 
+## Screenshots
+
+| Login | Dashboard | New transaction |
+|---|---|---|
+| <img src="screenshots/login.png" width="250" alt="Login screen"> | <img src="screenshots/home.png" width="250" alt="Dashboard with balance and spending split"> | <img src="screenshots/add.png" width="250" alt="New transaction form"> |
+
 ## Features
 
 - Register, log in and log out
@@ -26,7 +32,7 @@ Backend repository: [expense-tracker-api](https://github.com/Nick-Meron/expense-
 
 ## Tech stack
 
-- React Native with Expo (SDK 57)
+- React Native with Expo (SDK 58)
 - JavaScript
 - expo-secure-store for storing the login token
 - expo-font with Google Fonts (Bricolage Grotesque)
@@ -83,4 +89,4 @@ If the app says it cannot reach the server, check the IP address in `src/config.
 ## Notes
 
 - Built as a portfolio project to practise mobile development, API integration, token authentication and interface design.
-- Tested on a physical iPad using Expo Go.
+- Tested on a physical iPhone and iPad using Expo Go.
