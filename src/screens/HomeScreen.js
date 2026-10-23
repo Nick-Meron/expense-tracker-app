@@ -1,26 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { apiRequest } from '../api';
+import { colors, fonts, categoryColor } from '../theme';
+import { money } from '../format';
 import AddTransactionScreen from './AddTransactionScreen';
+
+const onPine = {
+  muted: '#A9C2BA',
+  income: '#8FD3AE',
+  spent: '#F2A99A',
+};
+
+function pad(n) {
+  return String(n).padStart(2, '0');
+}
 
 function currentMonth() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
 
 function shiftMonth(month, delta) {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
 
 function monthLabel(month) {
@@ -31,8 +43,21 @@ function monthLabel(month) {
   });
 }
 
-function money(value) {
-  return Number(value).toFixed(2);
+function dateKey(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function dayLabel(key) {
+  const now = new Date();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (key === dateKey(now)) return 'Today';
+  if (key === dateKey(yesterday)) return 'Yesterday';
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
 export default function HomeScreen({ token, user, onLogout }) {
@@ -52,7 +77,7 @@ export default function HomeScreen({ token, user, onLogout }) {
       setSummary(s);
       setTransactions(t);
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Could not load your data', e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -75,8 +100,9 @@ export default function HomeScreen({ token, user, onLogout }) {
   }
 
   function confirmDelete(item) {
-    Alert.alert('Delete transaction', `Delete "${item.note || item.category.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
+    const title = item.note || item.category.name;
+    Alert.alert('Delete this transaction?', `${title}: ${money(item.amount)}`, [
+      { text: 'Keep', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
@@ -88,79 +114,48 @@ export default function HomeScreen({ token, user, onLogout }) {
             });
             load();
           } catch (e) {
-            Alert.alert('Error', e.message);
+            Alert.alert('Could not delete', e.message);
           }
         },
       },
     ]);
   }
 
+  const sections = useMemo(() => {
+    const groups = [];
+    transactions.forEach((t) => {
+      const last = groups[groups.length - 1];
+      if (last && last.key === t.date) {
+        last.data.push(t);
+      } else {
+        groups.push({ key: t.date, title: dayLabel(t.date), data: [t] });
+      }
+    });
+    return groups;
+  }, [transactions]);
+
   const expenseRows = summary
-    ? summary.by_category.filter((r) => r.type === 'expense')
+    ? summary.by_category.filter((r) => r.type === 'expense' && r.total > 0)
     : [];
-  const maxExpense = expenseRows.length
-    ? Math.max(...expenseRows.map((r) => r.total))
-    : 1;
+  const totalExpense = summary ? Number(summary.total_expense) : 0;
 
-  function renderHeader() {
+  function renderListHeader() {
+    if (expenseRows.length === 0) return null;
     return (
-      <View>
-        <View style={styles.monthRow}>
-          <TouchableOpacity onPress={() => setMonth(shiftMonth(month, -1))}>
-            <Text style={styles.arrow}>{'<'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.monthText}>{monthLabel(month)}</Text>
-          <TouchableOpacity onPress={() => setMonth(shiftMonth(month, 1))}>
-            <Text style={styles.arrow}>{'>'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {summary && (
-          <View>
-            <View style={styles.cards}>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Income</Text>
-                <Text style={[styles.cardValue, styles.green]}>
-                  {money(summary.total_income)}
-                </Text>
-              </View>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Expenses</Text>
-                <Text style={[styles.cardValue, styles.red]}>
-                  {money(summary.total_expense)}
-                </Text>
-              </View>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Balance</Text>
-                <Text style={styles.cardValue}>{money(summary.balance)}</Text>
-              </View>
-            </View>
-
-            {expenseRows.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Spending by category</Text>
-                {expenseRows.map((r) => (
-                  <View key={r.category_id} style={styles.barRow}>
-                    <View style={styles.barLabels}>
-                      <Text style={styles.barName}>{r.name}</Text>
-                      <Text style={styles.barAmount}>{money(r.total)}</Text>
-                    </View>
-                    <View style={styles.barTrack}>
-                      <View
-                        style={[
-                          styles.barFill,
-                          { width: `${(r.total / maxExpense) * 100}%` },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.sectionTitle}>Transactions</Text>
+      <View style={styles.legend}>
+        <Text style={styles.sectionTitle}>Where it went</Text>
+        {expenseRows.map((r) => (
+          <View key={r.category_id} style={styles.legendRow}>
+            <View
+              style={[styles.dot, { backgroundColor: categoryColor(r.category_id) }]}
+            />
+            <Text style={styles.legendName}>{r.name}</Text>
+            <Text style={styles.legendPercent}>
+              {totalExpense > 0 ? Math.round((r.total / totalExpense) * 100) : 0}%
+            </Text>
+            <Text style={styles.legendAmount}>{money(r.total)}</Text>
           </View>
-        )}
+        ))}
       </View>
     );
   }
@@ -169,16 +164,25 @@ export default function HomeScreen({ token, user, onLogout }) {
     const isIncome = item.category.type === 'income';
     return (
       <TouchableOpacity
-        style={styles.item}
+        activeOpacity={0.6}
+        style={styles.row}
         onLongPress={() => confirmDelete(item)}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={styles.itemTitle}>{item.note || item.category.name}</Text>
-          <Text style={styles.itemSub}>
-            {item.category.name} - {item.date}
+        <View
+          style={[styles.dot, { backgroundColor: categoryColor(item.category.id) }]}
+        />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {item.note || item.category.name}
           </Text>
+          <Text style={styles.rowSub}>{item.category.name}</Text>
         </View>
-        <Text style={[styles.itemAmount, isIncome ? styles.green : styles.red]}>
+        <Text
+          style={[
+            styles.rowAmount,
+            { color: isIncome ? colors.leaf : colors.brick },
+          ]}
+        >
           {isIncome ? '+' : '-'}
           {money(item.amount)}
         </Text>
@@ -188,28 +192,89 @@ export default function HomeScreen({ token, user, onLogout }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.hello}>Hello, {user.name}</Text>
-          <Text style={styles.hint}>Long-press a transaction to delete it</Text>
+      <View style={styles.panel}>
+        <View style={styles.topRow}>
+          <Text style={styles.hello}>{user.name}</Text>
+          <TouchableOpacity
+            onPress={onLogout}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.logout}>Log out</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={onLogout}>
-          <Text style={styles.logout}>Log out</Text>
-        </TouchableOpacity>
+
+        <View style={styles.monthRow}>
+          <TouchableOpacity
+            onPress={() => setMonth(shiftMonth(month, -1))}
+            hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+          >
+            <Text style={styles.arrow}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.monthText}>{monthLabel(month)}</Text>
+          <TouchableOpacity
+            onPress={() => setMonth(shiftMonth(month, 1))}
+            hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+          >
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.balanceLabel}>Balance</Text>
+        <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
+          {money(summary ? summary.balance : 0)}
+        </Text>
+
+        <View style={styles.figures}>
+          <View style={styles.figure}>
+            <Text style={styles.figureLabel}>Income</Text>
+            <Text style={[styles.figureValue, { color: onPine.income }]}>
+              {money(summary ? summary.total_income : 0)}
+            </Text>
+          </View>
+          <View style={styles.figure}>
+            <Text style={styles.figureLabel}>Spent</Text>
+            <Text style={[styles.figureValue, { color: onPine.spent }]}>
+              {money(summary ? summary.total_expense : 0)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.stack}>
+          {expenseRows.map((r) => (
+            <View
+              key={r.category_id}
+              style={[
+                styles.stackPart,
+                { flex: r.total, backgroundColor: categoryColor(r.category_id) },
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator size="large" color={colors.pine} />
         </View>
       ) : (
-        <FlatList
-          data={transactions}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
-          ListHeaderComponent={renderHeader}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.dayTitle}>{section.title}</Text>
+          )}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={renderListHeader}
           ListEmptyComponent={
-            <Text style={styles.empty}>No transactions this month.</Text>
+            <Text style={styles.empty}>
+              Nothing in {monthLabel(month)} yet. Tap + to add a transaction.
+            </Text>
+          }
+          ListFooterComponent={
+            transactions.length > 0 ? (
+              <Text style={styles.footerHint}>Hold a transaction to delete it.</Text>
+            ) : null
           }
           refreshing={refreshing}
           onRefresh={refresh}
@@ -217,7 +282,11 @@ export default function HomeScreen({ token, user, onLogout }) {
         />
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowAdd(true)}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAdd(true)}
+        activeOpacity={0.85}
+      >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
@@ -238,86 +307,178 @@ export default function HomeScreen({ token, user, onLogout }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f6fa' },
+  container: { flex: 1, backgroundColor: colors.paper },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
+
+  panel: {
+    backgroundColor: colors.pine,
+    paddingTop: 64,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  hello: { fontSize: 20, fontWeight: 'bold' },
-  hint: { fontSize: 12, color: '#888', marginTop: 2 },
-  logout: { color: '#2563eb', fontSize: 16 },
-  listContent: { padding: 16, paddingBottom: 100 },
+  hello: { fontFamily: fonts.semibold, fontSize: 16, color: onPine.muted },
+  logout: { fontFamily: fonts.regular, fontSize: 15, color: onPine.muted },
+
   monthRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginTop: 20,
   },
-  arrow: { fontSize: 24, paddingHorizontal: 16, color: '#2563eb' },
-  monthText: { fontSize: 18, fontWeight: '600' },
-  cards: { flexDirection: 'row', justifyContent: 'space-between' },
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginHorizontal: 4,
+  arrow: {
+    fontFamily: fonts.regular,
+    fontSize: 30,
+    color: colors.saffron,
+    paddingHorizontal: 4,
+    lineHeight: 32,
   },
-  cardLabel: { fontSize: 12, color: '#888' },
-  cardValue: { fontSize: 18, fontWeight: 'bold', marginTop: 4 },
-  green: { color: '#16a34a' },
-  red: { color: '#dc2626' },
-  section: { marginTop: 16 },
+  monthText: {
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+    color: colors.white,
+    marginHorizontal: 12,
+  },
+
+  balanceLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: onPine.muted,
+    marginTop: 22,
+  },
+  balance: {
+    fontFamily: fonts.extrabold,
+    fontSize: 54,
+    color: colors.white,
+    marginTop: 2,
+  },
+
+  figures: { flexDirection: 'row', marginTop: 14 },
+  figure: { marginRight: 36 },
+  figureLabel: { fontFamily: fonts.regular, fontSize: 14, color: onPine.muted },
+  figureValue: { fontFamily: fonts.semibold, fontSize: 18, marginTop: 2 },
+
+  stack: {
+    flexDirection: 'row',
+    height: 10,
+    borderRadius: 5,
+    overflow: 'hidden',
+    marginTop: 22,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  stackPart: {
+    height: 10,
+    borderRightWidth: 2,
+    borderRightColor: colors.pine,
+  },
+
+  listContent: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 130,
+  },
+
+  legend: { marginBottom: 8 },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+    color: colors.ink,
+    marginBottom: 10,
   },
-  barRow: { marginBottom: 10 },
-  barLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  barName: { fontSize: 14 },
-  barAmount: { fontSize: 14, color: '#666' },
-  barTrack: {
-    height: 8,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  barFill: { height: 8, backgroundColor: '#2563eb', borderRadius: 4 },
-  item: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
+  legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 6,
   },
-  itemTitle: { fontSize: 16, fontWeight: '500' },
-  itemSub: { fontSize: 12, color: '#888', marginTop: 2 },
-  itemAmount: { fontSize: 16, fontWeight: 'bold' },
-  empty: { textAlign: 'center', color: '#888', marginTop: 24 },
+  legendName: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  legendPercent: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.stone,
+    marginRight: 16,
+  },
+  legendAmount: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.ink,
+    minWidth: 80,
+    textAlign: 'right',
+  },
+
+  dayTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.stone,
+    marginTop: 22,
+    marginBottom: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+  },
+  rowText: { flex: 1 },
+  rowTitle: { fontFamily: fonts.semibold, fontSize: 17, color: colors.ink },
+  rowSub: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.stone,
+    marginTop: 1,
+  },
+  rowAmount: { fontFamily: fonts.semibold, fontSize: 17, marginLeft: 12 },
+
+  empty: {
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.stone,
+    textAlign: 'center',
+    marginTop: 32,
+    lineHeight: 23,
+  },
+  footerHint: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.stone,
+    textAlign: 'center',
+    marginTop: 28,
+  },
+
   fab: {
     position: 'absolute',
     right: 24,
-    bottom: 32,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#2563eb',
+    bottom: 36,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: colors.saffron,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
-  fabText: { color: '#fff', fontSize: 32, lineHeight: 34 },
+  fabText: {
+    fontFamily: fonts.semibold,
+    fontSize: 34,
+    color: colors.pine,
+    lineHeight: 38,
+  },
 });

@@ -4,12 +4,31 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  View,
 } from 'react-native';
 import { apiRequest } from '../api';
+import { colors, fonts } from '../theme';
+
+function Field({ label, ...props }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={[styles.input, focused && styles.inputFocused]}
+        placeholderTextColor={colors.stone}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        {...props}
+      />
+    </View>
+  );
+}
 
 export default function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState('login');
@@ -18,20 +37,31 @@ export default function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const isLogin = mode === 'login';
+
   async function submit() {
+    if (!email.trim() || !password || (!isLogin && !name.trim())) {
+      Alert.alert(
+        'Some details are missing',
+        isLogin
+          ? 'Enter your email and password.'
+          : 'Enter your name, email and a password.'
+      );
+      return;
+    }
+
     setBusy(true);
     try {
-      const path = mode === 'login' ? '/login' : '/register';
-      const body =
-        mode === 'login'
-          ? { email: email.trim(), password }
-          : { name: name.trim(), email: email.trim(), password };
+      const path = isLogin ? '/login' : '/register';
+      const body = isLogin
+        ? { email: email.trim(), password }
+        : { name: name.trim(), email: email.trim(), password };
 
       const data = await apiRequest(path, { method: 'POST', body });
       setPassword('');
       await onLogin(data.token, data.user);
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(isLogin ? 'Could not log in' : 'Could not create account', e.message);
     } finally {
       setBusy(false);
     }
@@ -42,113 +72,157 @@ export default function LoginScreen({ onLogin }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Expense Tracker</Text>
-      <Text style={styles.subtitle}>
-        {mode === 'login' ? 'Log in to your account' : 'Create an account'}
-      </Text>
-
-      {mode === 'register' && (
-        <TextInput
-          style={styles.input}
-          placeholder="Name"
-          value={name}
-          onChangeText={setName}
-        />
-      )}
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-      />
-
-      <TouchableOpacity
-        style={[styles.button, busy && styles.buttonDisabled]}
-        onPress={submit}
-        disabled={busy}
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
       >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            {mode === 'login' ? 'Log in' : 'Register'}
+        <View style={styles.panel}>
+          <Text style={styles.title}>Expense{'\n'}Tracker</Text>
+          <Text style={styles.tagline}>See where your money goes each month.</Text>
+        </View>
+
+        <View style={styles.form}>
+          <Text style={styles.heading}>
+            {isLogin ? 'Welcome back' : 'Create your account'}
           </Text>
-        )}
-      </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
-      >
-        <Text style={styles.link}>
-          {mode === 'login'
-            ? "Don't have an account? Register"
-            : 'Already have an account? Log in'}
-        </Text>
-      </TouchableOpacity>
+          {!isLogin && (
+            <Field
+              label="Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              autoCapitalize="words"
+            />
+          )}
+
+          <Field
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+          />
+
+          <Field
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder={isLogin ? 'Your password' : 'At least 6 characters'}
+            secureTextEntry
+            autoCapitalize="none"
+          />
+
+          <TouchableOpacity
+            style={[styles.button, busy && styles.buttonDisabled]}
+            onPress={submit}
+            disabled={busy}
+            activeOpacity={0.85}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isLogin ? 'Log in' : 'Create account'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setMode(isLogin ? 'register' : 'login')}
+            style={styles.switch}
+          >
+            <Text style={styles.switchText}>
+              {isLogin ? 'New here? Create an account' : 'Already registered? Log in'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+  container: { flex: 1, backgroundColor: colors.paper },
+  scroll: { flexGrow: 1 },
+
+  panel: {
+    backgroundColor: colors.pine,
+    paddingTop: 96,
+    paddingBottom: 44,
+    paddingHorizontal: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontFamily: fonts.extrabold,
+    fontSize: 46,
+    lineHeight: 50,
+    color: colors.white,
+  },
+  tagline: {
+    fontFamily: fonts.regular,
+    fontSize: 17,
+    color: '#A9C2BA',
+    marginTop: 14,
+  },
+
+  form: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    paddingBottom: 48,
+  },
+  heading: {
+    fontFamily: fonts.semibold,
+    fontSize: 22,
+    color: colors.ink,
+    marginBottom: 20,
+  },
+
+  field: { marginBottom: 16 },
+  label: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.stone,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 24,
-  },
   input: {
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 12,
+    fontFamily: fonts.regular,
+    fontSize: 17,
+    color: colors.ink,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
   },
+  inputFocused: { borderColor: colors.pine },
+
   button: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#2563eb',
-    padding: 14,
-    borderRadius: 8,
+    backgroundColor: colors.pine,
+    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: 8,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+  buttonDisabled: { opacity: 0.6 },
   buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: fonts.semibold,
+    fontSize: 17,
+    color: colors.white,
   },
-  link: {
-    color: '#2563eb',
+
+  switch: { alignItems: 'center', marginTop: 22, padding: 6 },
+  switchText: {
+    fontFamily: fonts.semibold,
     fontSize: 15,
+    color: colors.pine,
   },
 });

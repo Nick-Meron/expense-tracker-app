@@ -16,12 +16,6 @@ Backend repository: [expense-tracker-api](https://github.com/Nick-Meron/expense-
 - Long-press a transaction to delete it
 - Pull down to refresh
 
-## Screenshots
-
-| Login | Dashboard | Add transaction |
-|---|---|---|
-| ![Login](screenshots/login.png) | ![Dashboard](screenshots/home.png) | ![Add transaction](screenshots/add.png) |
-
 ## Tech stack
 
 - React Native with Expo (SDK 57)
@@ -32,12 +26,12 @@ Backend repository: [expense-tracker-api](https://github.com/Nick-Meron/expense-
 ## Project structure
 
 ```
-App.js                          Login state and screen switching
-src/config.js                   API address
-src/api.js                      Helper for calling the API
-src/screens/LoginScreen.js      Login and register
-src/screens/HomeScreen.js       Summary, bars and transaction list
-src/screens/AddTransactionScreen.js   Add transaction form
+App.js                                 Login state and screen switching
+src/config.js                          API address
+src/api.js                             Helper for calling the API
+src/screens/LoginScreen.js             Login and register
+src/screens/HomeScreen.js              Summary, bars and transaction list
+src/screens/AddTransactionScreen.js    Add transaction form
 ```
 
 ## Getting started
